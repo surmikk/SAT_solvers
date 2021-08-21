@@ -66,7 +66,7 @@ def get_adjacency_list(clauses):
     return ad_list
 
 
-def unit_prop(literal, clauses, adjacency_list, satisfied_clauses, assignment):
+def unit_prop(literal, clauses, adjacency_list, satisfied_clauses, assignment, unass_literals_counter):
     """Unit propagate given literal"""
 
     global checked_clauses_counter
@@ -81,29 +81,31 @@ def unit_prop(literal, clauses, adjacency_list, satisfied_clauses, assignment):
         if not satisfied_clauses[clause_index]:
             satisfied_clauses[clause_index] = True
 
-    # removing literal negations from appropriate clauses
+    # adjusting clauses containing literal negation
     found_unit_literals = set()
     unsat = False
     for clause_index in adjacency_list[-literal]:
         checked_clauses_counter += 1
 
-        clauses[clause_index].remove(-literal)
-        if len(clauses[clause_index]) == 0:
+        unass_literals_counter[clause_index] += 1
+        unassigned_literals_number = len(clauses[clause_index]) - unass_literals_counter[clause_index]
+        if unassigned_literals_number == 0:
             unsat = True
-        if len(clauses[clause_index]) == 1:
-            lit = clauses[clause_index][0]
-            if lit not in assignment:
-                found_unit_literals.add(lit)
+        elif unassigned_literals_number == 1:
+            for lit in clauses[clause_index]:
+                if -lit not in assignment and lit not in assignment:
+                    found_unit_literals.add(lit)
+
     if unsat:
         return None
     else:
         return found_unit_literals
 
 
-def dpll(clauses, adjacency_list, satisfied_clauses, assignment, literals_to_satisfy=None, heuristics=False):
+def dpll(clauses, adjacency_list, satisfied_clauses, assignment, unass_literals_counter, literals_to_satisfy=None, heuristics=False):
     # unit propagation
     while len(literals_to_satisfy) > 0:
-        result = unit_prop(literals_to_satisfy.pop(), clauses, adjacency_list, satisfied_clauses, assignment)
+        result = unit_prop(literals_to_satisfy.pop(), clauses, adjacency_list, satisfied_clauses, assignment, unass_literals_counter)
         if result is None:
             return None
         else:
@@ -114,13 +116,12 @@ def dpll(clauses, adjacency_list, satisfied_clauses, assignment, literals_to_sat
         current_literal = decide_literal_heuristics(clauses, satisfied_clauses)
     else:
         current_literal = decide_literal(assignment, adjacency_list)
-
     if current_literal is None:
         return assignment
 
     original_sat_clauses = satisfied_clauses[:]
 
-    result = dpll(clauses, adjacency_list, satisfied_clauses, assignment, {current_literal}, heuristics)
+    result = dpll(clauses, adjacency_list, satisfied_clauses, assignment, unass_literals_counter, {current_literal}, heuristics)
     if result is None:
         #  backtracking
         index_of_current_literal = assignment.index(current_literal)
@@ -128,11 +129,11 @@ def dpll(clauses, adjacency_list, satisfied_clauses, assignment, literals_to_sat
         for l in literals_to_backtrack:
             assignment.pop()
             for clause_index in adjacency_list[-l]:
-                clauses[clause_index].append(-l)
+                unass_literals_counter[clause_index] -= 1
     else:
         return result
 
-    result = dpll(clauses, adjacency_list, original_sat_clauses, assignment, {-current_literal}, heuristics)
+    result = dpll(clauses, adjacency_list, original_sat_clauses, assignment, unass_literals_counter, {-current_literal}, heuristics)
 
     if result is None:
         return None
@@ -154,13 +155,14 @@ if __name__ == "__main__":
 
     adjacency_list = get_adjacency_list(clauses)
     unit_literals = set([clause[0] for clause in clauses if len(clause) == 1])
+    unass_literals_counter = [0 for _ in clauses]
 
     unit_prop_counter = 0
     decisions_counter = 0
     checked_clauses_counter = 0
 
     start = time.time()
-    assignment = dpll(clauses, adjacency_list, [False for i in clauses], [], literals_to_satisfy=unit_literals, heuristics=args.decision_heuristics)
+    assignment = dpll(clauses, adjacency_list, [False for i in clauses], [], unass_literals_counter, literals_to_satisfy=unit_literals, heuristics=args.decision_heuristics)
     end = time.time()
 
     if assignment is None:
