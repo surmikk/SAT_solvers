@@ -49,11 +49,10 @@ def unit_prop(literal, clauses, watched_literals, assignment):
 
     # trying to change watched literals in clauses where 'not literal' is watched
     found_unit_literals = set()
-    watched_clauses = watched_literals[-literal]
-    watched_literals[-literal] = set()
+    not_longer_watched = list()
 
     unsat = False
-    for clause_index in watched_clauses:
+    for clause_index in watched_literals[-literal]:
         checked_clauses_counter += 1
         next_watched_literal = None
         possible_unit_literal = None
@@ -61,7 +60,6 @@ def unit_prop(literal, clauses, watched_literals, assignment):
 
         if len(clauses[clause_index]) == 1:
             unsat = True
-            watched_literals[-literal].add(clause_index)
             continue
 
         neg_literal_offset = clauses[clause_index].index(-literal)
@@ -79,15 +77,18 @@ def unit_prop(literal, clauses, watched_literals, assignment):
                     next_watched_literal = l
 
         if next_watched_literal is None:
-            # watched 'literal' cannot move in this clause, returning to initial position
-            watched_literals[-literal].add(clause_index)
-
+            # watched 'literal' cannot move in this clause
             if possible_unit_literal_satisfied is None:
                 found_unit_literals.add(possible_unit_literal)
             elif not possible_unit_literal_satisfied:
                 unsat = True
         else:
+            not_longer_watched.append(clause_index)
             watched_literals[next_watched_literal].add(clause_index)
+
+
+    for clause_index in not_longer_watched:
+        watched_literals[-literal].remove(clause_index)
 
     if unsat:
         return None
