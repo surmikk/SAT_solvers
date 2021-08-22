@@ -64,18 +64,19 @@ def unit_prop(literal, clauses, watched_literals, assignment):
             watched_literals[-literal].add(clause_index)
             continue
 
-        for l in clauses[clause_index]:
-            if l is not -literal:
-                if clause_index in watched_literals[l]:
-                    # 'l' is another watched literal in this clause
-                    possible_unit_literal = l
-                    if possible_unit_literal in assignment:
-                        possible_unit_literal_satisfied = True
-                    if -possible_unit_literal in assignment:
-                        possible_unit_literal_satisfied = False
-                else:
-                    if not next_watched_literal and -l not in assignment:
-                        next_watched_literal = l
+        neg_literal_offset = clauses[clause_index].index(-literal)
+        for i in range(neg_literal_offset + 1, neg_literal_offset + len(clauses[clause_index])):
+            l = clauses[clause_index][i % len(clauses[clause_index])]
+            if clause_index in watched_literals[l]:
+                # 'l' is another watched literal in this clause
+                possible_unit_literal = l
+                if possible_unit_literal in assignment:
+                    possible_unit_literal_satisfied = True
+                if -possible_unit_literal in assignment:
+                    possible_unit_literal_satisfied = False
+            else:
+                if not next_watched_literal and -l not in assignment:
+                    next_watched_literal = l
 
         if next_watched_literal is None:
             # watched 'literal' cannot move in this clause, returning to initial position
