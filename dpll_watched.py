@@ -108,7 +108,7 @@ def dpll_watched(clauses, watched_literals, assignment, literals_to_satisfy):
 
     current_literal = decide_literal(assignment, watched_literals)
     if current_literal == None:
-        # all literals assigned
+        # all variables assigned
         return assignment
 
 
