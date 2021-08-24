@@ -1,19 +1,49 @@
 import sys
 import argparse
 import time
+import math
 
 from formula2cnf import load_smtlib
 from dpll import load_dimacs
 
 parser = argparse.ArgumentParser()
 parser.add_argument('infile', nargs='?', type=argparse.FileType('r', encoding='UTF-8'), default=sys.stdin)
+parser.add_argument('--restarts', choices=['geometric', 'Luby'], default=None)
+
+class Luby:
+    def __init__(self):
+        self.constant = 100
+        self.history = []
+        self.i = -1
+        self.get_next()
+
+    def get_next(self):
+        self.i += 1
+
+        k = math.log2(self.i + 1)
+        if k.is_integer():
+            self.history.append(int(2**(k-1)))
+        else:
+            k = int(math.log2(self.i)) + 1
+            self.history.append(
+                self.history[self.i - 2**(k-1) + 1]
+            )
+        return self.history[-1]
 
 
 class CDCL_solver:
-    def __init__(self, clauses):
+    def __init__(self, clauses, restarts):
         self.unit_prop_counter = 0
         self.decisions_counter = 0
         self.checked_clauses_counter = 0
+
+        self.restarts = restarts
+        if restarts is None:
+            self.conflicts_maximum = float('inf')
+        else:
+            self.conflicts_maximum = 2
+            if restarts == "Luby":
+                self.luby = Luby()
 
         self.reinitialize(clauses)
 
@@ -120,6 +150,9 @@ class CDCL_solver:
     def conflict_analysis(self, conflict_clause_id):
         self.conflicts_counter += 1
 
+        if self.conflicts_counter > self.conflicts_maximum:
+            return -10, None, None
+
         # searching for an assertive clause with 1-UIP
         C = set(self.clauses[conflict_clause_id])
         while True:
@@ -171,6 +204,14 @@ class CDCL_solver:
             self.dec_levels.pop()
         self.decision_level = backtrack_level
 
+    def restart(self):
+        if self.restarts == "geometric":
+            self.conflicts_maximum *= 1.5
+        elif self.restarts == "Luby":
+            self.conflicts_maximum = self.luby.constant * self.luby.get_next()
+
+        self.reinitialize(self.clauses)
+
     def try_to_solve(self):
         conflict_clause = self.unit_propagation()
         if conflict_clause >= 0:
@@ -206,6 +247,8 @@ class CDCL_solver:
             result = self.try_to_solve()
             if result is None or result != "restart":
                 solution_found = True
+            else:
+                self.restart()
 
         return result
 
@@ -223,7 +266,8 @@ if __name__ == "__main__":
     else:
         raise Exception("Unknown file type")
 
-    solver = CDCL_solver(clauses)
+
+    solver = CDCL_solver(clauses, args.restarts)
 
     start = time.time()
     assignment = solver.solve()
