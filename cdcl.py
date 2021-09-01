@@ -11,9 +11,65 @@ parser = argparse.ArgumentParser()
 parser.add_argument('infile', nargs='?', type=argparse.FileType('r', encoding='UTF-8'), default=sys.stdin)
 parser.add_argument('--restart', choices=['geometric', 'Luby'], default=None)
 parser.add_argument('--deletion', choices=['short', 'active', 'LBD'], default=None)
-parser.add_argument('--decision', choices=['random', 'most_common'], default='random')
+parser.add_argument('--decision', choices=['random', 'most_common', 'Jeroslow-Wang', 'VSIDS'], default='random')
 
 random.seed(42)
+
+
+class DecisionHeuristics:
+    def __init__(self, heuristics_type, clauses):
+        self.type = heuristics_type
+        all_literals = set()
+        for clause in clauses:
+            for l in clause:
+                all_literals.add(l)
+                all_literals.add(-l)
+        self.all_literals = list(all_literals)
+        self.literal_counters = dict()
+
+    def reinitialize(self, clauses):
+        for l in self.all_literals:
+            self.literal_counters[l] = 0
+
+        if self.type in ['most_common', 'Jeroslow-Wang']:
+            for clause in clauses:
+                for lit in clause:
+                    if self.type == 'most_common':
+                        self.literal_counters[lit] += 1
+                    elif self.type == 'Jeroslow-Wang':
+                        self.literal_counters[lit] += 2 ** -len(clause)
+
+    def process_new_clause(self, clause):
+        if self.type == 'Jeroslow-Wang':
+            for lit in clause:
+                self.literal_counters[lit] += 2 ** -len(clause)
+        elif self.type in ['most_common', 'VSIDS']:
+            for lit in clause:
+                self.literal_counters[lit] += 1
+
+        if self.type == 'VSIDS':
+            for lit in self.all_literals:
+                self.literal_counters[lit] /= 2
+
+    def get_literal(self, current_assignment):
+        if len(current_assignment) == len(self.all_literals) / 2:
+            return None
+
+        unassigned_literals = self.all_literals[:]
+        for l in current_assignment:
+            unassigned_literals.remove(l)
+            unassigned_literals.remove(-l)
+
+        if self.type == 'random':
+            return random.choice(unassigned_literals)
+        else:
+            decision_literal = 0
+            max_counter_value = 0
+            for l in unassigned_literals:
+                if self.literal_counters[l] >= max_counter_value:
+                    decision_literal = l
+                    max_counter_value = self.literal_counters[l]
+            return decision_literal
 
 
 class Luby:
@@ -48,7 +104,7 @@ class CDCL_solver:
         self.original_clauses_number = len(clauses)
 
         self.restart_type = restart
-        self.decision = decision
+        self.decision_heuristics = DecisionHeuristics(decision, clauses)
         if restart is None:
             self.conflicts_maximum = float('inf')
         else:
@@ -65,11 +121,10 @@ class CDCL_solver:
         self.antecedents = dict()   # mapping from literals to clause indices
         self.decision_level = 0     # current decision level
         self.conflicts_counter = 0
+        self.decision_heuristics.reinitialize(clauses)
 
         self.watched_literals = dict()
         self.unit_literals = set()  # set of literals used during unit propagation
-
-        self.literal_occurences_number = dict()
 
         for i, clause in enumerate(clauses):
             for literal in clause:
@@ -79,14 +134,6 @@ class CDCL_solver:
                 if -literal not in self.watched_literals:
                     self.watched_literals[-literal] = set()
 
-                # literals occurrences counting
-                if literal not in self.literal_occurences_number:
-                    self.literal_occurences_number[literal] = 1
-                else:
-                    self.literal_occurences_number[literal] += 1
-                if -literal not in self.literal_occurences_number:
-                    self.literal_occurences_number[-literal] = 0
-
         # watched literals setting & unit clauses finding
         for i, clause in enumerate(clauses):
             self.watched_literals[clause[0]].add(i)
@@ -94,24 +141,6 @@ class CDCL_solver:
                 self.watched_literals[clause[1]].add(i)
             elif len(clause) == 1:
                 self.unit_literals.add(clause[0])
-        self.unassigned_literals = list(self.watched_literals.keys())
-
-    def decide_literal(self):
-        if len(self.unassigned_literals) == 0:
-            return None
-
-        self.decisions_counter += 1
-        if self.decision == 'random':
-            return random.choice(self.unassigned_literals)
-
-        elif self.decision == 'most_common':
-            most_common_literal = 0
-            max_occurrences = 0
-            for l in self.unassigned_literals:
-                if self.literal_occurences_number[l] >= max_occurrences:
-                    most_common_literal = l
-                    max_occurrences = self.literal_occurences_number[l]
-            return most_common_literal
 
     def unit_propagation(self):
         """Returns conflict clause id or -1 if no conflict exists"""
@@ -133,8 +162,6 @@ class CDCL_solver:
         self.unit_prop_counter += 1
         self.assignment.append(literal)
         self.dec_levels.append(self.decision_level)
-        self.unassigned_literals.remove(literal)
-        self.unassigned_literals.remove(-literal)
 
         # trying to change watched literals in clauses where 'not literal' is watched
         found_unit_literals = set()
@@ -229,18 +256,15 @@ class CDCL_solver:
                 self.watched_literals[clause[0]].add(new_clause_index)
             else:
                 self.watched_literals[clause[1]].add(new_clause_index)
-        for l in clause:
-            self.literal_occurences_number[l] += 1
+        self.decision_heuristics.process_new_clause(clause)
 
         self.antecedents[unit_literal] = new_clause_index
         self.unit_literals = {unit_literal}
 
     def backtrack(self, backtrack_level):
         while len(self.assignment) > 0 and self.dec_levels[-1] > backtrack_level:
-            l = self.assignment.pop()
+            self.assignment.pop()
             self.dec_levels.pop()
-            self.unassigned_literals.append(l)
-            self.unassigned_literals.append(-l)
         self.decision_level = backtrack_level
 
     def restart(self):
@@ -297,12 +321,13 @@ class CDCL_solver:
             return None
 
         while True:
-            current_literal = self.decide_literal()
-            self.decision_level += 1
+            current_literal = self.decision_heuristics.get_literal(self.assignment)
 
             if current_literal is None:
                 # all variables assigned
                 return self.assignment
+            self.decisions_counter += 1
+            self.decision_level += 1
             self.unit_literals = {current_literal}
 
             while True:
