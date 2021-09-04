@@ -31,13 +31,13 @@ class DecisionHeuristics:
         for l in self.all_literals:
             self.literal_counters[l] = 0
 
-        if self.type in ['most_common', 'Jeroslow-Wang']:
+        if self.type in ['VSIDS', 'most_common', 'Jeroslow-Wang']:
             for clause in clauses:
                 for lit in clause:
-                    if self.type == 'most_common':
-                        self.literal_counters[lit] += 1
-                    elif self.type == 'Jeroslow-Wang':
+                    if self.type == 'Jeroslow-Wang':
                         self.literal_counters[lit] += 2 ** -len(clause)
+                    else:
+                        self.literal_counters[lit] += 1
 
     def process_new_clause(self, clause):
         if self.type == 'Jeroslow-Wang':
