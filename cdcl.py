@@ -17,8 +17,9 @@ random.seed(42)
 
 
 class DecisionHeuristics:
-    def __init__(self, heuristics_type, clauses):
+    def __init__(self, heuristics_type, clauses, assumptions):
         self.type = heuristics_type
+        self.assumptions = assumptions
         all_literals = set()
         for clause in clauses:
             for l in clause:
@@ -54,6 +55,9 @@ class DecisionHeuristics:
     def get_literal(self, current_assignment):
         if len(current_assignment) == len(self.all_literals) / 2:
             return None
+
+        if len(self.assumptions) > 0:
+            return self.assumptions.pop()
 
         unassigned_literals = self.all_literals[:]
         for l in current_assignment:
