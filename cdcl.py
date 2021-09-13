@@ -108,7 +108,7 @@ class CDCL_solver:
         self.original_clauses_number = len(clauses)
 
         self.restart_type = restart
-        self.decision_heuristics = DecisionHeuristics(decision, clauses)
+        self.decision_heuristics = DecisionHeuristics(decision, clauses, [])
         if restart is None:
             self.conflicts_maximum = float('inf')
         else:
