@@ -257,9 +257,11 @@ class CDCL_solver:
 
             resolved_literal = -self.assignment[latest_assignment_time]
             C.remove(resolved_literal)
-            for literal in self.clauses[self.antecedents[-resolved_literal]]:
-                if literal != -resolved_literal:
-                    C.add(literal)
+
+            if -resolved_literal in self.antecedents:  # otherwise it's contained in a unit clause
+                for literal in self.clauses[self.antecedents[-resolved_literal]]:
+                    if literal != -resolved_literal:
+                        C.add(literal)
 
     def join_learned_clause(self, clause, unit_literal):
         new_clause_index = len(self.clauses)
