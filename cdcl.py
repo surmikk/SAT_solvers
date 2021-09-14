@@ -60,7 +60,7 @@ class DecisionHeuristics:
         assumption_literal_found = False
         while len(self.assumptions) > 0:
             literal = self.assumptions.pop()
-            if literal in current_assignment:
+            if literal in current_assignment or -literal in current_assignment:
                 continue
             else:
                 assumption_literal_found = True
