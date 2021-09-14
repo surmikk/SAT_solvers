@@ -56,8 +56,18 @@ class DecisionHeuristics:
         if len(current_assignment) == len(self.all_literals) / 2:
             return None
 
-        if len(self.assumptions) > 0:
-            return self.assumptions.pop()
+        # process assumptions
+        assumption_literal_found = False
+        while len(self.assumptions) > 0:
+            literal = self.assumptions.pop()
+            if literal in current_assignment:
+                continue
+            else:
+                assumption_literal_found = True
+
+        if assumption_literal_found:
+            return literal
+
 
         unassigned_literals = self.all_literals[:]
         for l in current_assignment:
@@ -98,7 +108,7 @@ class Luby:
 
 
 class CDCL_solver:
-    def __init__(self, clauses, restart, deletion, decision):
+    def __init__(self, clauses, restart, deletion, decision, assumptions):
         self.unit_prop_counter = 0
         self.decisions_counter = 0
         self.checked_clauses_counter = 0
@@ -108,7 +118,7 @@ class CDCL_solver:
         self.original_clauses_number = len(clauses)
 
         self.restart_type = restart
-        self.decision_heuristics = DecisionHeuristics(decision, clauses, [])
+        self.decision_heuristics = DecisionHeuristics(decision, clauses, assumptions)
         if restart is None:
             self.conflicts_maximum = float('inf')
         else:
@@ -373,7 +383,7 @@ if __name__ == "__main__":
     else:
         raise Exception("Unknown file type")
 
-    solver = CDCL_solver(clauses, args.restart, args.deletion, args.decision)
+    solver = CDCL_solver(clauses, args.restart, args.deletion, args.decision, [])
 
     start = time.time()
     assignment = solver.solve()
