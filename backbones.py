@@ -32,28 +32,31 @@ if __name__ == "__main__":
         possible_backbones = set(assignment)
 
     backbones = set()
-    # we can work with solver's clauses (where are updated learned clauses), since we use assumptions
-    all_clauses = solver.clauses
+    original_clauses = solver.clauses  # we can use original clauses together with learned ones from the first run
+    solver_runs = 1
 
     while len(possible_backbones) > 0:
+        solver_runs += 1
         literal = possible_backbones.pop()
 
-        assumptions = [-literal]
-        solver = CDCL_solver(all_clauses, 'Luby', 'active', 'Jeroslow-Wang', assumptions=assumptions)
+        clauses = original_clauses[:]
+        clauses.append([-literal])
+
+        solver = CDCL_solver(clauses, 'Luby', 'active', 'Jeroslow-Wang', assumptions=[])
         assignment = solver.solve()
 
-        if -literal in assignment:
-            # 'literal' cannot be a backbone
-            continue
-        else:
-            # we assumed '-literal', but it's not in the assignment, it had to be deleted from assignment because
-            # of some confilct. This conflict must have been caused by this '-literal', so any assignment
-            # cannot contain '-literal' which means that 'literal' is a backbone.
-            backbones.add(literal)
+        if assignment is not None:
+            # '+literal' cannot be a backbone
+            # we can reduce 'possible_backbones' because they must be contained again in found assignment
             possible_backbones = possible_backbones.intersection(set(assignment)).difference(backbones)
+
+        else:
+            # there exists no model where '-literal' holds, so 'literal' is a backbone
+            backbones.add(literal)
 
     if len(backbones) == 0:
         print('No backbones exist')
     else:
         print(str(len(backbones)), 'backbones:')
         print(backbones)
+    print('Number of solver runs:', solver_runs)
